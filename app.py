@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import av
 import os
+import threading
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
@@ -11,8 +12,7 @@ st.set_page_config(page_title="AI Smart Mirror", layout="wide")
 st.title("AI-Enabled Smart Mirror")
 st.subheader(datetime.now().strftime("%A, %B %d, %Y - %I:%M %p"))
 
-# Expanded column layout to make camera display larger
-col1, col2 = st.columns([1, 3])
+col1, col2 = st.columns([1, 2])
 
 with col1:
     st.header("Outfit Selection")
@@ -26,13 +26,32 @@ with col1:
     st.write("• **Weather:** 29°C / Partly Cloudy")
     st.write("• **Schedule:** Science Exhibition Demo")
 
-# Absolute path resolving for outfit images
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 outfit_imgs = {
     "Outfit 1": cv2.imread(os.path.join(BASE_DIR, 'outfit1.png'), cv2.IMREAD_UNCHANGED),
     "Outfit 2": cv2.imread(os.path.join(BASE_DIR, 'outfit2.png'), cv2.IMREAD_UNCHANGED),
     "Outfit 3": cv2.imread(os.path.join(BASE_DIR, 'outfit3.png'), cv2.IMREAD_UNCHANGED)
 }
+
+# Thread-safe container to sync UI selection with WebRTC thread
+class AppState:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.outfit = "None"
+
+    def set_outfit(self, val):
+        with self.lock:
+            self.outfit = val
+
+    def get_outfit(self):
+        with self.lock:
+            return self.outfit
+
+if "app_state" not in st.session_state:
+    st.session_state.app_state = AppState()
+
+st.session_state.app_state.set_outfit(outfit_choice)
 
 class SmartMirrorProcessor(VideoProcessorBase):
     def __init__(self):
@@ -76,7 +95,9 @@ class SmartMirrorProcessor(VideoProcessorBase):
             x, y, w, h = map(int, self.smooth_box)
             cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-            overlay_img = outfit_imgs.get(st.session_state.get("outfit_choice", "None"))
+            current_outfit = st.session_state.app_state.get_outfit()
+            overlay_img = outfit_imgs.get(current_outfit)
+
             if overlay_img is not None:
                 try:
                     ow = int(w * 3.2)
@@ -111,10 +132,24 @@ class SmartMirrorProcessor(VideoProcessorBase):
 
 with col2:
     st.header("Live Mirror Feed")
-    st.session_state["outfit_choice"] = outfit_choice
+    
+    # Fast STUN ICE configuration to eliminate connection delays
+    rtc_config = RTCConfiguration({
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"]}
+        ]
+    })
+
+    # HD video constraints without microphone requirement
+    media_constraints = {
+        "video": {"width": {"ideal": 1280}, "height": {"ideal": 720}},
+        "audio": False
+    }
+
     webrtc_streamer(
         key="smart-mirror",
         video_processor_factory=SmartMirrorProcessor,
-        media_stream_constraints={"video": True, "audio": False},  # Audio disabled
-        rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+        media_stream_constraints=media_constraints,
+        rtc_configuration=rtc_config,
+        async_processing=True
     )
