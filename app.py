@@ -11,7 +11,8 @@ st.set_page_config(page_title="AI Smart Mirror", layout="wide")
 st.title("AI-Enabled Smart Mirror")
 st.subheader(datetime.now().strftime("%A, %B %d, %Y - %I:%M %p"))
 
-col1, col2 = st.columns([1, 2])
+# Expanded column layout to make camera display larger
+col1, col2 = st.columns([1, 3])
 
 with col1:
     st.header("Outfit Selection")
@@ -25,11 +26,12 @@ with col1:
     st.write("• **Weather:** 29°C / Partly Cloudy")
     st.write("• **Schedule:** Science Exhibition Demo")
 
-# Load outfits
+# Absolute path resolving for outfit images
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 outfit_imgs = {
-    "Outfit 1": cv2.imread('outfit1.png', cv2.IMREAD_UNCHANGED),
-    "Outfit 2": cv2.imread('outfit2.png', cv2.IMREAD_UNCHANGED),
-    "Outfit 3": cv2.imread('outfit3.png', cv2.IMREAD_UNCHANGED)
+    "Outfit 1": cv2.imread(os.path.join(BASE_DIR, 'outfit1.png'), cv2.IMREAD_UNCHANGED),
+    "Outfit 2": cv2.imread(os.path.join(BASE_DIR, 'outfit2.png'), cv2.IMREAD_UNCHANGED),
+    "Outfit 3": cv2.imread(os.path.join(BASE_DIR, 'outfit3.png'), cv2.IMREAD_UNCHANGED)
 }
 
 class SmartMirrorProcessor(VideoProcessorBase):
@@ -44,9 +46,8 @@ class SmartMirrorProcessor(VideoProcessorBase):
         img = cv2.flip(img, 1)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Lazy initialize CascadeClassifier inside stream processor
         if self.face_cascade is None:
-            cascade_path = "haarcascade_frontalface_default.xml"
+            cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
             if os.path.exists(cascade_path):
                 self.face_cascade = cv2.CascadeClassifier(cascade_path)
 
@@ -114,5 +115,6 @@ with col2:
     webrtc_streamer(
         key="smart-mirror",
         video_processor_factory=SmartMirrorProcessor,
+        media_stream_constraints={"video": True, "audio": False},  # Audio disabled
         rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
     )
