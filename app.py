@@ -32,29 +32,14 @@ outfit_imgs = {
     "Outfit 3": cv2.imread(os.path.join(BASE_DIR, 'outfit3.png'), cv2.IMREAD_UNCHANGED)
 }
 
-# Guaranteed Cascade Loading Function
-def load_cascade():
-    cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
-    if not os.path.exists(cascade_path):
-        try:
-            url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-            urllib.request.urlretrieve(url, cascade_path)
-        except Exception:
-            pass
-            
-    if os.path.exists(cascade_path):
-        cascade = cv2.CascadeClassifier(cascade_path)
-        if not cascade.empty():
-            return cascade
-            
-    # OpenCV built-in fallback path
-    builtin_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    if os.path.exists(builtin_path):
-        return cv2.CascadeClassifier(builtin_path)
-        
-    return None
-
-face_cascade = load_cascade()
+# Ensure cascade XML exists locally
+cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
+if not os.path.exists(cascade_path):
+    try:
+        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+        urllib.request.urlretrieve(url, cascade_path)
+    except Exception:
+        pass
 
 with col2:
     st.header("Live Mirror Feed")
@@ -65,10 +50,16 @@ with col2:
         cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
         cv2_img = cv2.flip(cv2_img, 1)
 
-        gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+        # Safely instantiate classifier inside button event execution
+        try:
+            face_cascade = cv2.CascadeClassifier()
+            if os.path.exists(cascade_path):
+                face_cascade.load(cascade_path)
+        except Exception:
+            face_cascade = None
 
         if face_cascade is not None and not face_cascade.empty():
-            # Relaxed parameters for reliable face detection across camera resolutions
+            gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(
                 gray, 
                 scaleFactor=1.1, 
@@ -79,6 +70,9 @@ with col2:
             if len(faces) > 0:
                 faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
                 (x, y, w, h) = faces[0]
+
+                # Draw green face box
+                cv2.rectangle(cv2_img, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
                 overlay_img = outfit_imgs.get(outfit_choice)
                 if overlay_img is not None:
@@ -111,9 +105,9 @@ with col2:
                     except Exception:
                         pass
             else:
-                st.warning("Face not detected. Position yourself clearly in front of the camera and try again.")
+                st.warning("Face not detected clearly. Ensure good lighting and try again.")
         else:
-            st.error("Haar cascade model could not be loaded.")
+            st.error("Face detection model could not be initialized.")
 
         cv2_img_rgb = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
         st.image(cv2_img_rgb, caption="Virtual Outfit Overlay Preview", use_container_width=True)
