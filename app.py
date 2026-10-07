@@ -24,8 +24,6 @@ with col1:
 
 with col2:
     st.header("Live Mirror Feed")
-    
-    # Camera Index Selector
     cam_index = st.number_input("Camera Index", min_value=0, max_value=5, value=0, step=1)
     run_camera = st.checkbox("Turn On Camera", value=True)
     
@@ -41,13 +39,16 @@ with col2:
             overlay_img = cv2.imread('outfit3.png', cv2.IMREAD_UNCHANGED)
 
         FRAME_WINDOW = st.image([])
-        
-        # Use CAP_DSHOW on Windows for reliable webcam access
         camera = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
 
         if not camera.isOpened():
-            st.error(f"Cannot open camera at index {cam_index}. Try changing Camera Index above or check if another app is using the webcam.")
+            st.error(f"Cannot open camera at index {cam_index}.")
         else:
+            # Persistent bounding box & frame loss counter for smoothing
+            smooth_box = None  # Holds smoothed (x, y, w, h)
+            alpha = 0.2        # Smoothing weight (lower = smoother)
+            frames_lost = 0    # Keep last position for up to 10 dropped frames
+
             while run_camera:
                 ret, frame = camera.read()
                 if not ret:
@@ -56,17 +57,43 @@ with col2:
 
                 frame = cv2.flip(frame, 1)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+                
+                faces = face_cascade.detectMultiScale(
+                    gray, 
+                    scaleFactor=1.1, 
+                    minNeighbors=4, 
+                    minSize=(60, 60)
+                )
 
-                for (x, y, w, h) in faces:
+                if len(faces) > 0:
+                    # Pick largest face
+                    faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
+                    curr_x, curr_y, curr_w, curr_h = faces[0]
+                    frames_lost = 0
+
+                    if smooth_box is None:
+                        smooth_box = [float(curr_x), float(curr_y), float(curr_w), float(curr_h)]
+                    else:
+                        # EMA Smoothing
+                        smooth_box[0] = alpha * curr_x + (1 - alpha) * smooth_box[0]
+                        smooth_box[1] = alpha * curr_y + (1 - alpha) * smooth_box[1]
+                        smooth_box[2] = alpha * curr_w + (1 - alpha) * smooth_box[2]
+                        smooth_box[3] = alpha * curr_h + (1 - alpha) * smooth_box[3]
+                else:
+                    frames_lost += 1
+                    if frames_lost > 10:
+                        smooth_box = None  # Clear if lost for too long
+
+                if smooth_box is not None:
+                    x, y, w, h = map(int, smooth_box)
                     cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                    
+
                     if overlay_img is not None:
                         try:
-                            ow = int(w * 2.5)
-                            oh = int(h * 3.0)
+                            ow = int(w * 3.2)
+                            oh = int(h * 3.5)
                             ox = int(x + (w / 2) - (ow / 2))
-                            oy = int(y + h * 0.8)
+                            oy = int(y + h * 0.85)
 
                             resized_overlay = cv2.resize(overlay_img, (ow, oh))
 
@@ -94,6 +121,16 @@ with col2:
                                     frame[y1:y2, x1:x2] = overlay_crop[:, :, :3]
                         except Exception:
                             pass
+                elif overlay_img is not None:
+                    cv2.putText(
+                        frame, 
+                        "Position face inside frame to view outfit", 
+                        (30, 40), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.7, 
+                        (0, 0, 255), 
+                        2
+                    )
 
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 FRAME_WINDOW.image(frame)
