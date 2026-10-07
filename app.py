@@ -24,7 +24,9 @@ with col1:
     st.write("• **Weather:** 29°C / Partly Cloudy")
     st.write("• **Schedule:** Science Exhibition Demo")
 
-face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+# Load cascade model using OpenCV built-in absolute path
+cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+face_cascade = cv2.CascadeClassifier(cascade_path)
 
 outfit_imgs = {
     "Outfit 1": cv2.imread('outfit1.png', cv2.IMREAD_UNCHANGED),
