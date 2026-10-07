@@ -2,6 +2,8 @@
 import cv2
 import numpy as np
 import av
+import os
+import urllib.request
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
@@ -24,9 +26,13 @@ with col1:
     st.write("• **Weather:** 29°C / Partly Cloudy")
     st.write("• **Schedule:** Science Exhibition Demo")
 
-# Load cascade model using OpenCV built-in absolute path
-cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-face_cascade = cv2.CascadeClassifier(cascade_path)
+# Ensure haarcascade_frontalface_default.xml exists locally or download it
+cascade_filename = "haarcascade_frontalface_default.xml"
+if not os.path.exists(cascade_filename):
+    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+    urllib.request.urlretrieve(url, cascade_filename)
+
+face_cascade = cv2.CascadeClassifier(cascade_filename)
 
 outfit_imgs = {
     "Outfit 1": cv2.imread('outfit1.png', cv2.IMREAD_UNCHANGED),
