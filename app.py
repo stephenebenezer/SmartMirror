@@ -31,21 +31,26 @@ outfit_imgs = {
     "Outfit 3": cv2.imread(os.path.join(BASE_DIR, 'outfit3.png'), cv2.IMREAD_UNCHANGED)
 }
 
-cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
-face_cascade = cv2.CascadeClassifier(cascade_path) if os.path.exists(cascade_path) else None
-
 with col2:
     st.header("Live Mirror Feed")
-    img_file_buffer = st.camera_input("Take a photo to overlay your virtual outfit")
+    img_file_buffer = st.camera_input("Take a photo to preview virtual outfit")
 
     if img_file_buffer is not None:
         bytes_data = img_file_buffer.getvalue()
         cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
         cv2_img = cv2.flip(cv2_img, 1)
 
-        gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+        # Defer cascade initialization to prevent top-level AttributeError
+        cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
+        face_cascade = None
+        if os.path.exists(cascade_path):
+            try:
+                face_cascade = cv2.CascadeClassifier(cascade_path)
+            except Exception:
+                face_cascade = None
 
-        if face_cascade is not None:
+        if face_cascade is not None and not face_cascade.empty():
+            gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
 
             if len(faces) > 0:
