@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 import os
+import urllib.request
 from datetime import datetime
 
 st.set_page_config(page_title="AI Smart Mirror", layout="wide")
@@ -31,6 +32,30 @@ outfit_imgs = {
     "Outfit 3": cv2.imread(os.path.join(BASE_DIR, 'outfit3.png'), cv2.IMREAD_UNCHANGED)
 }
 
+# Guaranteed Cascade Loading Function
+def load_cascade():
+    cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
+    if not os.path.exists(cascade_path):
+        try:
+            url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+            urllib.request.urlretrieve(url, cascade_path)
+        except Exception:
+            pass
+            
+    if os.path.exists(cascade_path):
+        cascade = cv2.CascadeClassifier(cascade_path)
+        if not cascade.empty():
+            return cascade
+            
+    # OpenCV built-in fallback path
+    builtin_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    if os.path.exists(builtin_path):
+        return cv2.CascadeClassifier(builtin_path)
+        
+    return None
+
+face_cascade = load_cascade()
+
 with col2:
     st.header("Live Mirror Feed")
     img_file_buffer = st.camera_input("Take a photo to preview virtual outfit")
@@ -40,23 +65,20 @@ with col2:
         cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
         cv2_img = cv2.flip(cv2_img, 1)
 
-        # Defer cascade initialization to prevent top-level AttributeError
-        cascade_path = os.path.join(BASE_DIR, "haarcascade_frontalface_default.xml")
-        face_cascade = None
-        if os.path.exists(cascade_path):
-            try:
-                face_cascade = cv2.CascadeClassifier(cascade_path)
-            except Exception:
-                face_cascade = None
+        gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
 
         if face_cascade is not None and not face_cascade.empty():
-            gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+            # Relaxed parameters for reliable face detection across camera resolutions
+            faces = face_cascade.detectMultiScale(
+                gray, 
+                scaleFactor=1.1, 
+                minNeighbors=3, 
+                minSize=(30, 30)
+            )
 
             if len(faces) > 0:
                 faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
                 (x, y, w, h) = faces[0]
-                cv2.rectangle(cv2_img, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
                 overlay_img = outfit_imgs.get(outfit_choice)
                 if overlay_img is not None:
@@ -88,6 +110,10 @@ with col2:
                                     )
                     except Exception:
                         pass
+            else:
+                st.warning("Face not detected. Position yourself clearly in front of the camera and try again.")
+        else:
+            st.error("Haar cascade model could not be loaded.")
 
         cv2_img_rgb = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
         st.image(cv2_img_rgb, caption="Virtual Outfit Overlay Preview", use_container_width=True)
