@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import av
 import os
-import urllib.request
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
@@ -26,14 +25,7 @@ with col1:
     st.write("• **Weather:** 29°C / Partly Cloudy")
     st.write("• **Schedule:** Science Exhibition Demo")
 
-# Ensure haarcascade_frontalface_default.xml exists locally or download it
-cascade_filename = "haarcascade_frontalface_default.xml"
-if not os.path.exists(cascade_filename):
-    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-    urllib.request.urlretrieve(url, cascade_filename)
-
-face_cascade = cv2.CascadeClassifier(cascade_filename)
-
+# Load outfits
 outfit_imgs = {
     "Outfit 1": cv2.imread('outfit1.png', cv2.IMREAD_UNCHANGED),
     "Outfit 2": cv2.imread('outfit2.png', cv2.IMREAD_UNCHANGED),
@@ -45,13 +37,22 @@ class SmartMirrorProcessor(VideoProcessorBase):
         self.smooth_box = None
         self.alpha = 0.2
         self.frames_lost = 0
+        self.face_cascade = None
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
         img = cv2.flip(img, 1)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+        # Lazy initialize CascadeClassifier inside stream processor
+        if self.face_cascade is None:
+            cascade_path = "haarcascade_frontalface_default.xml"
+            if os.path.exists(cascade_path):
+                self.face_cascade = cv2.CascadeClassifier(cascade_path)
+
+        faces = []
+        if self.face_cascade is not None:
+            faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
 
         if len(faces) > 0:
             faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
