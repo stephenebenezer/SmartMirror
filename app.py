@@ -42,16 +42,20 @@ if not os.path.exists(cascade_path):
 
 with col2:
     st.header("Live Mirror Feed")
+    
+    # Store camera photo in session_state so it doesn't clear on outfit selection
     img_file_buffer = st.camera_input("Take a photo to preview virtual outfit")
 
     if img_file_buffer is not None:
-        bytes_data = img_file_buffer.getvalue()
+        st.session_state["saved_photo"] = img_file_buffer.getvalue()
+
+    if "saved_photo" in st.session_state:
+        bytes_data = st.session_state["saved_photo"]
         cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
         cv2_img = cv2.flip(cv2_img, 1)
 
         img_h, img_w, _ = cv2_img.shape
 
-        # Try loading face cascade
         face_cascade = None
         if os.path.exists(cascade_path):
             try:
@@ -64,7 +68,6 @@ with col2:
             gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=2, minSize=(30, 30))
 
-        # Determine target bounding box (Detected Face OR Default Center Fallback)
         if len(faces) > 0:
             faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
             (x, y, w, h) = faces[0]
@@ -74,7 +77,7 @@ with col2:
             ox = int(x + (w / 2) - (ow / 2))
             oy = int(y + h * 0.85)
         else:
-            # Fallback chest overlay position centered in camera frame
+            # Automatic center chest overlay fallback if face detection drops
             ow = int(img_w * 0.7)
             oh = int(img_h * 0.75)
             ox = int((img_w - ow) / 2)
@@ -107,4 +110,4 @@ with col2:
                 pass
 
         cv2_img_rgb = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
-        st.image(cv2_img_rgb, caption="Virtual Outfit Overlay Preview", use_container_width=True)
+        st.image(cv2_img_rgb, caption=f"Active Outfit: {outfit_choice}", use_container_width=True)
