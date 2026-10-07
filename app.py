@@ -24,6 +24,9 @@ with col1:
 
 with col2:
     st.header("Live Mirror Feed")
+    
+    # Camera Index Selector
+    cam_index = st.number_input("Camera Index", min_value=0, max_value=5, value=0, step=1)
     run_camera = st.checkbox("Turn On Camera", value=True)
     
     if run_camera:
@@ -38,60 +41,61 @@ with col2:
             overlay_img = cv2.imread('outfit3.png', cv2.IMREAD_UNCHANGED)
 
         FRAME_WINDOW = st.image([])
-        camera = cv2.VideoCapture(0)
+        
+        # Use CAP_DSHOW on Windows for reliable webcam access
+        camera = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
 
-        while run_camera:
-            ret, frame = camera.read()
-            if not ret:
-                st.error("Failed to access camera.")
-                break
+        if not camera.isOpened():
+            st.error(f"Cannot open camera at index {cam_index}. Try changing Camera Index above or check if another app is using the webcam.")
+        else:
+            while run_camera:
+                ret, frame = camera.read()
+                if not ret:
+                    st.error("Failed to grab camera frame.")
+                    break
 
-            frame = cv2.flip(frame, 1)
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+                frame = cv2.flip(frame, 1)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-            for (x, y, w, h) in faces:
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                
-                if overlay_img is not None:
-                    try:
-                        # Calculate outfit dimensions relative to face size
-                        ow = int(w * 2.5)
-                        oh = int(h * 3.0)
-                        ox = int(x + (w / 2) - (ow / 2))
-                        oy = int(y + h * 0.8)
+                for (x, y, w, h) in faces:
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    
+                    if overlay_img is not None:
+                        try:
+                            ow = int(w * 2.5)
+                            oh = int(h * 3.0)
+                            ox = int(x + (w / 2) - (ow / 2))
+                            oy = int(y + h * 0.8)
 
-                        # Resize overlay image
-                        resized_overlay = cv2.resize(overlay_img, (ow, oh))
+                            resized_overlay = cv2.resize(overlay_img, (ow, oh))
 
-                        # Determine overlapping bounding box coordinates
-                        y1, y2 = max(0, oy), min(frame.shape[0], oy + oh)
-                        x1, x2 = max(0, ox), min(frame.shape[1], ox + ow)
+                            y1, y2 = max(0, oy), min(frame.shape[0], oy + oh)
+                            x1, x2 = max(0, ox), min(frame.shape[1], ox + ow)
 
-                        # Determine slice boundaries on the overlay image
-                        overlay_y1 = max(0, -oy)
-                        overlay_y2 = overlay_y1 + (y2 - y1)
-                        overlay_x1 = max(0, -ox)
-                        overlay_x2 = overlay_x1 + (x2 - x1)
+                            overlay_y1 = max(0, -oy)
+                            overlay_y2 = overlay_y1 + (y2 - y1)
+                            overlay_x1 = max(0, -ox)
+                            overlay_x2 = overlay_x1 + (x2 - x1)
 
-                        if y1 < y2 and x1 < x2:
-                            overlay_crop = resized_overlay[overlay_y1:overlay_y2, overlay_x1:overlay_x2]
-                            
-                            if overlay_crop.shape[2] == 4:
-                                alpha_s = overlay_crop[:, :, 3] / 255.0
-                                alpha_l = 1.0 - alpha_s
+                            if y1 < y2 and x1 < x2:
+                                overlay_crop = resized_overlay[overlay_y1:overlay_y2, overlay_x1:overlay_x2]
+                                
+                                if overlay_crop.shape[2] == 4:
+                                    alpha_s = overlay_crop[:, :, 3] / 255.0
+                                    alpha_l = 1.0 - alpha_s
 
-                                for c in range(0, 3):
-                                    frame[y1:y2, x1:x2, c] = (
-                                        alpha_s * overlay_crop[:, :, c] +
-                                        alpha_l * frame[y1:y2, x1:x2, c]
-                                    )
-                            else:
-                                frame[y1:y2, x1:x2] = overlay_crop[:, :, :3]
-                    except Exception as e:
-                        pass
+                                    for c in range(0, 3):
+                                        frame[y1:y2, x1:x2, c] = (
+                                            alpha_s * overlay_crop[:, :, c] +
+                                            alpha_l * frame[y1:y2, x1:x2, c]
+                                        )
+                                else:
+                                    frame[y1:y2, x1:x2] = overlay_crop[:, :, :3]
+                        except Exception:
+                            pass
 
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            FRAME_WINDOW.image(frame)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                FRAME_WINDOW.image(frame)
 
-        camera.release()
+            camera.release()
