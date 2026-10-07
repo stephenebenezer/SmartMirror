@@ -1,7 +1,6 @@
 ﻿import streamlit as st
 import cv2
 import numpy as np
-from PIL import Image
 from datetime import datetime
 
 st.set_page_config(page_title="AI Smart Mirror", layout="wide")
@@ -28,10 +27,8 @@ with col2:
     run_camera = st.checkbox("Turn On Camera", value=True)
     
     if run_camera:
-        # Load Face Cascade
         face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
         
-        # Load Outfits if selected
         overlay_img = None
         if outfit_choice == "Outfit 1":
             overlay_img = cv2.imread('outfit1.png', cv2.IMREAD_UNCHANGED)
@@ -49,7 +46,6 @@ with col2:
                 st.error("Failed to access camera.")
                 break
 
-            # Mirror frame horizontally for standard mirror feel
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.3, 5)
@@ -57,29 +53,44 @@ with col2:
             for (x, y, w, h) in faces:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 
-                # Overlay logic if an outfit is selected
                 if overlay_img is not None:
                     try:
-                        # Position outfit below neck based on detected face bounding box
-                        ow = int(w * 2.2)
-                        oh = int(h * 2.8)
+                        # Calculate outfit dimensions relative to face size
+                        ow = int(w * 2.5)
+                        oh = int(h * 3.0)
                         ox = int(x + (w / 2) - (ow / 2))
-                        oy = int(y + h * 0.9)
+                        oy = int(y + h * 0.8)
 
-                        if ox > 0 and oy > 0 and ox + ow < frame.shape[1] and oy + oh < frame.shape[0]:
-                            resized_overlay = cv2.resize(overlay_img, (ow, oh))
-                            alpha_s = resized_overlay[:, :, 3] / 255.0
-                            alpha_l = 1.0 - alpha_s
+                        # Resize overlay image
+                        resized_overlay = cv2.resize(overlay_img, (ow, oh))
 
-                            for c in range(0, 3):
-                                frame[oy:oy+oh, ox:ox+ow, c] = (
-                                    alpha_s * resized_overlay[:, :, c] +
-                                    alpha_l * frame[oy:oy+oh, ox:ox+ow, c]
-                                )
-                    except Exception:
+                        # Determine overlapping bounding box coordinates
+                        y1, y2 = max(0, oy), min(frame.shape[0], oy + oh)
+                        x1, x2 = max(0, ox), min(frame.shape[1], ox + ow)
+
+                        # Determine slice boundaries on the overlay image
+                        overlay_y1 = max(0, -oy)
+                        overlay_y2 = overlay_y1 + (y2 - y1)
+                        overlay_x1 = max(0, -ox)
+                        overlay_x2 = overlay_x1 + (x2 - x1)
+
+                        if y1 < y2 and x1 < x2:
+                            overlay_crop = resized_overlay[overlay_y1:overlay_y2, overlay_x1:overlay_x2]
+                            
+                            if overlay_crop.shape[2] == 4:
+                                alpha_s = overlay_crop[:, :, 3] / 255.0
+                                alpha_l = 1.0 - alpha_s
+
+                                for c in range(0, 3):
+                                    frame[y1:y2, x1:x2, c] = (
+                                        alpha_s * overlay_crop[:, :, c] +
+                                        alpha_l * frame[y1:y2, x1:x2, c]
+                                    )
+                            else:
+                                frame[y1:y2, x1:x2] = overlay_crop[:, :, :3]
+                    except Exception as e:
                         pass
 
-            # Convert BGR (OpenCV) to RGB (Streamlit)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             FRAME_WINDOW.image(frame)
 
